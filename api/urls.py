@@ -1,9 +1,19 @@
-from django.urls import path
+# api/urls.py
+from django.urls import path, re_path
+from django.views.generic.base import RedirectView
+from django.http import HttpResponseGone, HttpResponseNotFound
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView  # optional for JWT if you switch later
+
 from . import views
 
 urlpatterns = [
     # ==========================
-    # PUBLIC
+    # CSRF (keep for safety)
+    # ==========================
+    path('csrf/', views.csrf, name='csrf'),
+
+    # ==========================
+    # PUBLIC ENDPOINTS
     # ==========================
     path('home/', views.api_home, name='api_home'),
     path('contact/', views.contact_message_create, name='contact'),
@@ -16,35 +26,62 @@ urlpatterns = [
     path('blogs/', views.blogs_list, name='blogs_list'),
     path('blogs/<slug:slug>/', views.blog_detail, name='blog_detail'),
 
-    # Patch Requests
+    # Patch Requests (quote form)
     path('patch-requests/', views.create_patch_request, name='create_patch_request'),
 
     # ==========================
-    # CHAT
+    # CHAT RELATED
     # ==========================
     path('chat/<str:room>/', views.recent_chat_messages, name='recent_chat_messages'),
     path('chat/upload/', views.chat_file_upload, name='chat_file_upload'),
     path('upload/image/', views.upload_image, name='upload_image'),
 
     # ==========================
-    # ADMIN AUTH
+    # ADMIN AUTH (consider moving to JWT later)
     # ==========================
-    path('admin-token/', views.obtain_admin_token, name='obtain_admin_token'),
+    path('admin-token/', views.obtain_admin_token, name='admin_token'),
 
     # ==========================
-    # ADMIN - SERVICES
+    # ADMIN PANEL ENDPOINTS
     # ==========================
-    path('admin/services/create/', views.admin_create_service, name='admin_create_service'),
-    path('admin/services/<int:pk>/update/', views.admin_update_service, name='admin_update_service'),
-    path('admin/services/<int:pk>/delete/', views.admin_delete_service, name='admin_delete_service'),
+    # Services CRUD
+    path('admin-chat/services/create/', views.admin_create_service, name='admin_create_service'),
+    path('admin-chat/services/<int:pk>/update/', views.admin_update_service, name='admin_update_service'),
+    path('admin-chat/services/<int:pk>/delete/', views.admin_delete_service, name='admin_delete_service'),
+
+    # Slider (only create for now — add update/delete if needed)
+    path('admin-chat/slider/create/', views.admin_create_slider, name='admin_create_slider'),
+
+    # Page Content
+    path('admin-chat/pages/<str:key>/update/', views.admin_update_pagecontent, name='admin_update_pagecontent'),
 
     # ==========================
-    # ADMIN - SLIDER
+    # BLOCK COMMON PROBES / SCANNER PATHS (reduces log noise)
     # ==========================
-    path('admin/slider/create/', views.admin_create_slider, name='admin_create_slider'),
+    # Return 404 silently for bots looking for vulnerabilities
+    path("swagger.json", lambda r: HttpResponseNotFound()),
+    path("swagger-ui/", lambda r: HttpResponseNotFound()),
+    path("graphql", lambda r: HttpResponseNotFound()),
+    path("gql", lambda r: HttpResponseNotFound()),
+    path(".env", lambda r: HttpResponseNotFound()),
+    path("wp-login.php", lambda r: HttpResponseNotFound()),
+    path("xmlrpc.php", lambda r: HttpResponseNotFound()),
 
     # ==========================
-    # ADMIN - PAGE CONTENT
+    # 301 REDIRECTS for Search Console 404s (from your report)
     # ==========================
-    path('admin/pages/<str:key>/update/', views.admin_update_pagecontent, name='admin_update_pagecontent'),
+    # Old service URLs
+    path('services/printed-patches/', RedirectView.as_view(url='/services/sublimation-patches/', permanent=True)),
+    path('services/custom-leather-patches/', RedirectView.as_view(url='/services/leather-patch/', permanent=True)),
+    path('services/premium-leather-custom-patches-usa/', RedirectView.as_view(url='/services/leather-patch/', permanent=True)),
+    path('services/woven-custom-patches/', RedirectView.as_view(url='/services/wowen-patch/', permanent=True)),
+    path('services/high-quality-woven-custom-patches-usa/', RedirectView.as_view(url='/services/wowen-patch/', permanent=True)),
+
+    # Old blog URLs
+    path('blog/custom-patches-usa/', RedirectView.as_view(url='/blog/', permanent=True)),
+    path('blog/custom-chenille-patches-usa-premium-varsity-style/', RedirectView.as_view(url='/blog/', permanent=True)),
+    # Keywords list
+    path('keywords/', views.keyword_list, name='keyword_list'),
+    # Junk/test post - 410 Gone (tells Google to drop it permanently)
+    re_path(r'^blog/hglkjgjhgjhgjhgjhh/?$', lambda request: HttpResponseGone()),
 ]

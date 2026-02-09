@@ -18,29 +18,21 @@ def pick_primary_admin():
         return None
     return sorted(list(online_admins))[0]
 
-
 def get_media_url(path):
-    """
-    Return correct URL for frontend.
-    Prevent double /media/ in Docker / local env.
-    """
+    """Return correct URL for frontend, prevent double /media/ in Docker/local."""
     if not path:
         return None
     path = path.lstrip("/")
-    if getattr(settings, "DOCKER_ENV", False):
-        base = getattr(settings, "NEXT_PUBLIC_MEDIA_BASE", "http://localhost:8000/media")
-    else:
-        base = getattr(settings, "MEDIA_URL", "/media/")
-    return f"{base}/{path}".replace("//", "/").replace(":/", "://")  # fix double slashes
-
+    base = getattr(settings, "NEXT_PUBLIC_MEDIA_BASE", getattr(settings, "MEDIA_URL", "/media/"))
+    return f"{base}/{path}".replace("//", "/").replace(":/", "://")
 
 async def save_base64_image(base64_data, filename_prefix="chat"):
     """Save base64 image and return relative file path."""
     try:
         if not base64_data.startswith("data:image/"):
             return None
-        format, imgstr = base64_data.split(";base64,")
-        ext = format.split("/")[-1]
+        fmt, imgstr = base64_data.split(";base64,")
+        ext = fmt.split("/")[-1]
         file_name = f"{filename_prefix}_{os.urandom(8).hex()}.{ext}"
         file_path = os.path.join(settings.MEDIA_ROOT, "chat_attachments", file_name)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -51,14 +43,13 @@ async def save_base64_image(base64_data, filename_prefix="chat"):
         print("⚠️ Image save failed:", e)
         return None
 
-
 # -------------------- USER CONSUMER --------------------
 class UserChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         from .models import ChatRoom, ChatMessage
 
-        self.username = self.scope['url_route']['kwargs']['username']
-        if not re.match(r'^[\w-]+$', self.username):
+        self.username = self.scope['url_route']['kwargs'].get('username')
+        if not self.username or not re.match(r'^[\w-]+$', self.username):
             await self.close()
             return
 
@@ -71,8 +62,8 @@ class UserChatConsumer(AsyncWebsocketConsumer):
                     if resp.status == 200:
                         data = await resp.json()
                         country = data.get("country", "Unknown")
-        except Exception as e:
-            print("Geo lookup failed:", e)
+        except Exception:
+            pass
 
         # Join user room
         self.room_group_name = f"user_{self.username}"
@@ -90,7 +81,7 @@ class UserChatConsumer(AsyncWebsocketConsumer):
             room.assigned_admin = primary_admin
             await database_sync_to_async(room.save)()
 
-        # ✅ Only send welcome message if user is connecting first time in this session
+        # Send welcome message only once per session
         if newly_added:
             welcome_text = f"Welcome {self.username}!"
             if primary_admin:
@@ -111,13 +102,13 @@ class UserChatConsumer(AsyncWebsocketConsumer):
                 "assigned_admin": primary_admin
             }))
 
-            # Notify admin group (only once when user actually joins)
+            # Notify admin group
             await self.channel_layer.group_send(
                 "admin_group",
                 {"type": "user_joined", "username": self.username, "country": country}
             )
 
-        # Always send updated user list to all admins
+        # Send updated user list to admins
         users_payload = [
             {"username": u, "country": online_user_meta.get(u, {}).get("country", "Unknown")}
             for u in online_users
@@ -145,9 +136,14 @@ class UserChatConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         from .models import ChatRoom, ChatMessage
 
-        data = json.loads(text_data)
-        action = data.get("action")
+        # Production-safe JSON parsing
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            await self.send(json.dumps({"type": "error", "error": "Invalid JSON"}))
+            return
 
+        action = data.get("action")
         if action == "reply":
             message = data.get("message", "").strip()
             attachment = data.get("attachment")
@@ -159,7 +155,7 @@ class UserChatConsumer(AsyncWebsocketConsumer):
 
             room = await database_sync_to_async(ChatRoom.objects.get)(user_name=self.username)
             saved_file_path = None
-            if attachment and attachment.startswith("data:image/"):
+            if attachment:
                 saved_file_path = await save_base64_image(attachment, filename_prefix=self.username)
 
             msg_obj = await database_sync_to_async(ChatMessage.objects.create)(
@@ -170,7 +166,7 @@ class UserChatConsumer(AsyncWebsocketConsumer):
                 attachment=saved_file_path or None
             )
 
-            # ✅ Send immediately to user
+            # Send back to user
             await self.send(json.dumps({
                 "type": "sent",
                 "message": message,
@@ -180,7 +176,7 @@ class UserChatConsumer(AsyncWebsocketConsumer):
                 "timestamp": msg_obj.timestamp.isoformat()
             }))
 
-            # ✅ Send to admin group only
+            # Send to admin group
             await self.channel_layer.group_send(
                 "admin_group",
                 {
@@ -194,7 +190,6 @@ class UserChatConsumer(AsyncWebsocketConsumer):
 
     # ---------------- EVENT HANDLERS ----------------
     async def admin_message_to_user(self, event):
-        """Send admin message to user"""
         await self.send(json.dumps({
             "type": "sent",
             "message": event.get("message"),
@@ -257,9 +252,13 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         from .models import ChatRoom, ChatMessage
 
-        data = json.loads(text_data)
-        action = data.get("action")
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            await self.send(json.dumps({"type": "error", "error": "Invalid JSON"}))
+            return
 
+        action = data.get("action")
         if action == "reply":
             to_user = data.get("to")
             message = data.get("message", "").strip()
@@ -272,7 +271,7 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
 
             room = await database_sync_to_async(ChatRoom.objects.get)(user_name=to_user)
             saved_file_path = None
-            if attachment and attachment.startswith("data:image/"):
+            if attachment:
                 saved_file_path = await save_base64_image(attachment, filename_prefix=self.admin_name)
 
             msg_obj = await database_sync_to_async(ChatMessage.objects.create)(
@@ -283,7 +282,6 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
                 attachment=saved_file_path or None
             )
 
-            # ✅ Send only to that user's channel
             await self.channel_layer.group_send(
                 f"user_{to_user}",
                 {
@@ -296,7 +294,6 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
                 }
             )
 
-            # Confirm to admin separately
             await self.send(json.dumps({
                 "type": "sent_admin",
                 "to": to_user,

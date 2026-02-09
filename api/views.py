@@ -2,6 +2,7 @@ import os
 from django.core.files.storage import default_storage
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import authenticate
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.decorators import (
     api_view, permission_classes, parser_classes
 )
@@ -14,20 +15,32 @@ from rest_framework.authtoken.models import Token
 from .models import (
     SliderItem, PageContent, BlogPost,
     PatchRequest, PatchArtwork, ChatMessage,
-    Service, UploadedImage, ChatFile, ContactMessage
+    Service, UploadedImage, ChatFile, ContactMessage, Keyword
 )
 from .serializers import (
     SliderSerializer, PageContentSerializer,
     BlogPostSerializer, PatchRequestSerializer, PatchArtworkSerializer,
     ChatMessageSerializer, ServiceSerializer, ServiceImageSerializer,
-    ContactMessageSerializer
+    ContactMessageSerializer,KeywordSerializer
 )
+from .consumers import get_media_url
+
+# ---------------------------
+# CSRF Endpoint
+# ---------------------------
+@api_view(['GET'])
+@ensure_csrf_cookie
+def csrf(request):
+    """
+    Call this endpoint from the browser to set the CSRF cookie.
+    Example: fetch('/api/csrf/')
+    """
+    return Response({"detail": "CSRF cookie set"})
 
 
 # ==========================================================
 # CHAT FUNCTIONS
 # ==========================================================
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def chat_file_upload(request):
@@ -48,12 +61,10 @@ def chat_file_upload(request):
         "uploaded_at": chat_file.created_at
     })
 
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def recent_chat_messages(request, room):
     messages = ChatMessage.objects.filter(room=room).order_by('-timestamp')[:50]
-
     data = [{
         "id": msg.id,
         "room": msg.room.user_name if msg.room else None,
@@ -63,9 +74,7 @@ def recent_chat_messages(request, room):
         "attachment": msg.attachment.url if msg.attachment else None,
         "timestamp": msg.timestamp
     } for msg in messages]
-
     return Response(data)
-
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -73,35 +82,40 @@ def upload_image(request):
     image = request.FILES.get('image')
     if not image:
         return Response({"error": "Image file is required"}, status=400)
-
     uploaded = UploadedImage.objects.create(image=image)
-    return Response({
-        "message": "Image uploaded successfully",
-        "url": uploaded.image.url
-    })
+    return Response({"message": "Image uploaded successfully", "url": uploaded.image.url})
 
 
 # ==========================================================
 # PUBLIC APIs
 # ==========================================================
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 
 @api_view(["GET"])
 def api_home(request):
+    # Slider items
     slider_qs = SliderItem.objects.filter(active=True).order_by("order")
     slider_ser = SliderSerializer(slider_qs, many=True, context={"request": request})
 
+    # Hero content
     hero = PageContent.objects.filter(key="home_hero").first()
     hero_ser = PageContentSerializer(hero, context={"request": request}) if hero else {}
 
+    # Features content
     features_qs = PageContent.objects.filter(key__startswith="home_feature_")
     features_ser = PageContentSerializer(features_qs, many=True, context={"request": request})
 
+    # Services
     services_qs = Service.objects.prefetch_related("gallery").all()
     services_ser = ServiceSerializer(services_qs, many=True, context={"request": request})
 
+    # Blogs
     blogs_qs = BlogPost.objects.filter(published=True).order_by("-published_at")
     blogs_ser = BlogPostSerializer(blogs_qs, many=True, context={"request": request})
 
+    # Return all home page data in one response
     return Response({
         "sliders": slider_ser.data,
         "hero": hero_ser.data if hero_ser else {},
@@ -109,6 +123,7 @@ def api_home(request):
         "services": services_ser.data,
         "blogs": blogs_ser.data,
     })
+
 
 
 @api_view(["GET"])
@@ -138,38 +153,52 @@ def blog_detail(request, slug):
     ser = BlogPostSerializer(blog, context={"request": request})
     return Response(ser.data)
 
-
 # ==========================================================
-# PATCH REQUESTS
+# CREATE PATCH REQUEST
 # ==========================================================
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
 def create_patch_request(request):
-    data = {k: request.data.get(k) for k in [
-        "name","email","phone","patch_type","embroidery_coverage","unit",
-        "width","height","shape","backing","border","thread","quantity","custom_qty","message"
-    ]}
+    # ---------------------------
+    # Extract data from request
+    # ---------------------------
+    fields = [
+        "name", "email", "phone",
+        "patch_type", "embroidery_coverage", "dimension",
+        "unit", "width", "height", "shape", "backing", "border", "thread",
+        "leather_type", "finish_effect",
+        "quantity", "custom_qty", "message"
+    ]
     
+    data = {k: request.data.get(k) for k in fields}
+
+    # ---------------------------
+    # Serialize & Validate
+    # ---------------------------
     serializer = PatchRequestSerializer(data=data, context={"request": request})
     
     if serializer.is_valid():
-        print(serializer.errors) 
         patch_req = serializer.save()
+
+        # ---------------------------
+        # Handle multiple artwork uploads
+        # ---------------------------
         for f in request.FILES.getlist("artworks"):
             PatchArtwork.objects.create(request=patch_req, file=f)
+        
         out_ser = PatchRequestSerializer(patch_req, context={"request": request})
         return Response({"status": "ok", "data": out_ser.data}, status=status.HTTP_201_CREATED)
     
-    # Log the errors
+    # ---------------------------
+    # Return validation errors
+    # ---------------------------
     print("Serializer errors:", serializer.errors)
     return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 # ==========================================================
 # CONTACT FORM
 # ==========================================================
-
 @api_view(["POST"])
 def contact_message_create(request):
     serializer = ContactMessageSerializer(data=request.data)
@@ -182,7 +211,6 @@ def contact_message_create(request):
 # ==========================================================
 # ADMIN AUTH
 # ==========================================================
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def obtain_admin_token(request):
@@ -201,7 +229,6 @@ def obtain_admin_token(request):
 # ==========================================================
 # ADMIN PANEL
 # ==========================================================
-
 def check_admin(user):
     return user.is_authenticated and user.is_staff
 
@@ -277,3 +304,13 @@ def admin_update_pagecontent(request):
         page.image = request.FILES["image"]
     page.save()
     return Response({"message": "Page content updated"}, status=200)
+
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])  
+def keyword_list(request):
+    qs = Keyword.objects.all().order_by('-volume')
+    ser = KeywordSerializer(qs, many=True)
+    return Response(ser.data) 
