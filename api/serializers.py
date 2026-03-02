@@ -1,7 +1,7 @@
 # api/serializers.py
 from rest_framework import serializers
 from .models import (
-    SliderItem, PageContent, BlogPost, PatchRequest, PatchArtwork,
+    SliderItem, BlogPost, PatchRequest, PatchArtwork,
     ChatMessage, Service, ServiceImage, ContactMessage, UploadedImage,
     Keyword
 )
@@ -48,10 +48,10 @@ class BlogPostSerializer(serializers.ModelSerializer):
 # ---------------------------
 # Page Content
 # ---------------------------
-class PageContentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PageContent
-        fields = "__all__"
+# class PageContentSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = PageContent
+#         fields = "__all__"
 
 
 # ---------------------------
@@ -184,7 +184,7 @@ class ServiceSerializer(serializers.ModelSerializer):
         related = obj.get_related_blogs()
         return [{"title": b.title, "slug": b.slug, "excerpt": b.excerpt[:100]} for b in related]
 
-
+ 
 # ---------------------------
 # Contact Messages
 # ---------------------------

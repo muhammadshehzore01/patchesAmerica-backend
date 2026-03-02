@@ -5,12 +5,22 @@ from django.http import HttpResponseGone, HttpResponseNotFound
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView  # optional for JWT if you switch later
 
 from . import views
+from . import autocomplete
+from .views import us_states  # import the us_states view
 
 urlpatterns = [
     # ==========================
     # CSRF (keep for safety)
     # ==========================
     path('csrf/', views.csrf, name='csrf'),
+
+    # health check backend 
+    path('health/', views.health_check, name='health_check'),
+
+    # ==========================
+    # Auto complete cities
+    # ==========================
+    path('city-autocomplete/', autocomplete.CityAutocomplete.as_view(), name='city-autocomplete'),
 
     # ==========================
     # PUBLIC ENDPOINTS
@@ -28,6 +38,7 @@ urlpatterns = [
 
     # Patch Requests (quote form)
     path('patch-requests/', views.create_patch_request, name='create_patch_request'),
+    path('patch-requests-json/', views.patch_requests_json),
 
     # ==========================
     # CHAT RELATED
@@ -53,7 +64,7 @@ urlpatterns = [
     path('admin-chat/slider/create/', views.admin_create_slider, name='admin_create_slider'),
 
     # Page Content
-    path('admin-chat/pages/<str:key>/update/', views.admin_update_pagecontent, name='admin_update_pagecontent'),
+    # path('admin-chat/pages/<str:key>/update/', views.admin_update_pagecontent, name='admin_update_pagecontent'),
 
     # ==========================
     # BLOCK COMMON PROBES / SCANNER PATHS (reduces log noise)
@@ -68,20 +79,26 @@ urlpatterns = [
     path("xmlrpc.php", lambda r: HttpResponseNotFound()),
 
     # ==========================
-    # 301 REDIRECTS for Search Console 404s (from your report)
+    # 301 REDIRECTS
     # ==========================
     # Old service URLs
     path('services/printed-patches/', RedirectView.as_view(url='/services/sublimation-patches/', permanent=True)),
     path('services/custom-leather-patches/', RedirectView.as_view(url='/services/leather-patch/', permanent=True)),
-    path('services/premium-leather-custom-patches-usa/', RedirectView.as_view(url='/services/leather-patch/', permanent=True)),
+    path('services/premium-leather-custom-patches-usa-patches-usa/', RedirectView.as_view(url='/services/leather-patch/', permanent=True)),
     path('services/woven-custom-patches/', RedirectView.as_view(url='/services/wowen-patch/', permanent=True)),
     path('services/high-quality-woven-custom-patches-usa/', RedirectView.as_view(url='/services/wowen-patch/', permanent=True)),
 
     # Old blog URLs
     path('blog/custom-patches-usa/', RedirectView.as_view(url='/blog/', permanent=True)),
     path('blog/custom-chenille-patches-usa-premium-varsity-style/', RedirectView.as_view(url='/blog/', permanent=True)),
+
     # Keywords list
     path('keywords/', views.keyword_list, name='keyword_list'),
+
+    # Fetch US states and city
+    path("us-states/", us_states, name="us-states"),
+    path("city/<int:city_id>/", views.city_detail, name="city_detail"),
+
     # Junk/test post - 410 Gone (tells Google to drop it permanently)
     re_path(r'^blog/hglkjgjhgjhgjhgjhh/?$', lambda request: HttpResponseGone()),
 ]

@@ -2,7 +2,10 @@ import os
 from django.core.files.storage import default_storage
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import authenticate
+from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.db.models import Prefetch
 from rest_framework.decorators import (
     api_view, permission_classes, parser_classes
 )
@@ -13,12 +16,14 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.authtoken.models import Token
 
 from .models import (
-    SliderItem, PageContent, BlogPost,
+    SliderItem, BlogPost,
     PatchRequest, PatchArtwork, ChatMessage,
-    Service, UploadedImage, ChatFile, ContactMessage, Keyword
+    Service, UploadedImage, ChatFile, ContactMessage, Keyword,
+    Country, State, City
+
 )
 from .serializers import (
-    SliderSerializer, PageContentSerializer,
+    SliderSerializer, 
     BlogPostSerializer, PatchRequestSerializer, PatchArtworkSerializer,
     ChatMessageSerializer, ServiceSerializer, ServiceImageSerializer,
     ContactMessageSerializer,KeywordSerializer
@@ -99,13 +104,13 @@ def api_home(request):
     slider_qs = SliderItem.objects.filter(active=True).order_by("order")
     slider_ser = SliderSerializer(slider_qs, many=True, context={"request": request})
 
-    # Hero content
-    hero = PageContent.objects.filter(key="home_hero").first()
-    hero_ser = PageContentSerializer(hero, context={"request": request}) if hero else {}
+    # # Hero content
+    # hero = PageContent.objects.filter(key="home_hero").first()
+    # hero_ser = PageContentSerializer(hero, context={"request": request}) if hero else {}
 
-    # Features content
-    features_qs = PageContent.objects.filter(key__startswith="home_feature_")
-    features_ser = PageContentSerializer(features_qs, many=True, context={"request": request})
+    # # Features content
+    # features_qs = PageContent.objects.filter(key__startswith="home_feature_")
+    # features_ser = PageContentSerializer(features_qs, many=True, context={"request": request})
 
     # Services
     services_qs = Service.objects.prefetch_related("gallery").all()
@@ -118,8 +123,8 @@ def api_home(request):
     # Return all home page data in one response
     return Response({
         "sliders": slider_ser.data,
-        "hero": hero_ser.data if hero_ser else {},
-        "features": features_ser.data,
+        # "hero": hero_ser.data if hero_ser else {},
+        # "features": features_ser.data,
         "services": services_ser.data,
         "blogs": blogs_ser.data,
     })
@@ -194,6 +199,20 @@ def create_patch_request(request):
     # ---------------------------
     print("Serializer errors:", serializer.errors)
     return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# ==========================================================
+# GET PATCH REQUEST
+# ==========================================================
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])  # public access
+def patch_requests_json(request):
+    qs = PatchRequest.objects.prefetch_related('artworks').all()
+    serializer = PatchRequestSerializer(qs, many=True, context={"request": request})
+    return Response(serializer.data)
 
 
 # ==========================================================
@@ -288,24 +307,6 @@ def admin_create_slider(request):
     return Response({"message": "Slider created", "id": slider.id}, status=201)
 
 
-@api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
-def admin_update_pagecontent(request):
-    if not check_admin(request.user):
-        return Response({"error": "Admin access required"}, status=403)
-    page_key = request.data.get("key")
-    if not page_key:
-        return Response({"error": "Page key required"}, status=400)
-    page, _ = PageContent.objects.get_or_create(key=page_key)
-    page.title = request.data.get("title", page.title)
-    page.subtitle = request.data.get("subtitle", page.subtitle)
-    page.description = request.data.get("description", page.description)
-    if "image" in request.FILES:
-        page.image = request.FILES["image"]
-    page.save()
-    return Response({"message": "Page content updated"}, status=200)
-
-
 
 
 @api_view(['GET'])
@@ -314,3 +315,56 @@ def keyword_list(request):
     qs = Keyword.objects.all().order_by('-volume')
     ser = KeywordSerializer(qs, many=True)
     return Response(ser.data) 
+
+
+
+@api_view(['GET'])
+def us_states(request):
+    try:
+        country = Country.objects.get(code="US")
+    except Country.DoesNotExist:
+        return Response({"error": "US country not found"}, status=404)
+
+    # Prefetch cities properly using related_name
+    states_qs = State.objects.filter(country=country).prefetch_related(
+        Prefetch('cities', queryset=City.objects.all())
+    )
+
+    states_data = []
+    for state in states_qs:
+        # Access cities via 'cities' related_name
+        cities = [city.name for city in state.cities.all()]
+        states_data.append({
+            "code": state.code,
+            "name": state.name,
+            "cities": cities
+        })
+
+    return Response(states_data)
+
+
+@api_view(["GET"])
+def city_detail(request, city_id):
+    city = get_object_or_404(City, pk=city_id)
+    return Response({
+        "name": city.name,
+        "state": city.state.name,
+        "country": city.state.country.name,
+        "population": city.population
+    })
+
+
+# ==========================================================
+# Backend health check
+# ==========================================================
+
+def health_check(request):
+    """
+    Simple health check endpoint for Docker healthcheck.
+    Returns 200 OK with JSON if app is running.
+    """
+    return JsonResponse({
+        "status": "healthy",
+        "message": "Django backend is running",
+        "timestamp": timezone.now().isoformat()
+    })

@@ -122,6 +122,7 @@ CHANNEL_LAYERS = {
 # Installed Apps
 # ---------------------------
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -129,6 +130,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'api',
+    'dal',
+    'dal_select2',
     'channels',
     'rest_framework',
     'corsheaders',
@@ -143,6 +146,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -221,3 +225,36 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ---------------------------
+# JAZZMIN_SETTINGS
+# ---------------------------
+
+JAZZMIN_SETTINGS = {
+
+    "site_title": "Northern Patches Admin",
+    "site_header": "Northern Patches",
+    "site_brand": "Northern Patches",
+
+    "welcome_sign": "Welcome to Northern Patches Admin",
+
+    "icons": {
+        "api.Country": "fas fa-flag-usa",
+        "api.State": "fas fa-map",
+        "api.City": "fas fa-city",
+        "api.Service": "fas fa-cogs",
+        "api.BlogPost": "fas fa-blog",
+        "api.Keyword": "fas fa-search",
+    },
+
+    "navigation_expanded": True,
+
+    "order_with_respect_to": [
+        "api.Country",
+        "api.State",
+        "api.City",
+        "api.Service",
+        "api.BlogPost",
+        "api.Keyword",
+    ],
+}

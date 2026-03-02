@@ -6,6 +6,54 @@ from django.utils.html import strip_tags
 from django.utils.timezone import now
 from django.utils import timezone
 
+#-----------------------
+# Country Model
+# ---------------------------
+class Country(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=10, unique=True)
+
+    is_default = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
+
+
+# ---------------------------
+# State Model
+# ---------------------------
+class State(models.Model):
+    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name="states")
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=10)
+
+    population = models.BigIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("country", "code")
+        ordering = ["-population", "name"]
+
+    def __str__(self):
+        return f"{self.name}, {self.country.code}"
+
+
+# ---------------------------
+# City Model
+# ---------------------------
+class City(models.Model):
+    state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="cities")
+    name = models.CharField(max_length=100)
+
+    population = models.BigIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-population"]
+        unique_together = ("state", "name")
+
+    def __str__(self):
+        return f"{self.name}, {self.state.code}"
+
+
 
 # ---------------------------
 # Slider iteam model
@@ -27,22 +75,29 @@ class SliderItem(models.Model):
 
 
 # ---------------------------
-# Page content model
-# ---------------------------
-class PageContent(models.Model):
-    key = models.SlugField(unique=True)
-    title = models.CharField(max_length=250, blank=True)
-    body = models.TextField(blank=True)
-    extra = models.JSONField(default=dict, blank=True)
-
-    def __str__(self):
-        return self.key
-
-
-# ---------------------------
 # Blog Model
 # ---------------------------
 class BlogPost(models.Model):
+    country = models.ForeignKey(
+        Country,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    state = models.ForeignKey(
+        State,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    city = models.ForeignKey(
+        City,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
     title = models.CharField(max_length=250)
     slug = models.SlugField(max_length=500,unique=True, blank=True)
     excerpt = models.TextField(blank=True, help_text="Short summary, used for SEO and previews.")
@@ -79,6 +134,10 @@ class BlogPost(models.Model):
 
         if self.published and not self.published_at:
             self.published_at = now()
+
+        if not self.country:
+            default_country = Country.objects.filter(is_default=True).first()
+            self.country = default_country     
 
         super().save(*args, **kwargs)
 
@@ -232,6 +291,26 @@ class PatchArtwork(models.Model):
 # ---------------------------
 
 class Service(models.Model):
+    country = models.ForeignKey(
+        Country,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    state = models.ForeignKey(
+        State,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    city = models.ForeignKey(
+        City,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
     title = models.CharField(max_length=100)
     slug = models.SlugField(max_length=500, unique=True, blank=True)
     description = models.TextField()
@@ -260,6 +339,10 @@ class Service(models.Model):
             words = [self.title.lower(), "custom patches USA", "no minimum custom patches"]
             slug_words = self.slug.replace('-', ' ').split()[:5]
             self.meta_keywords = ", ".join(words + slug_words)
+
+        if not self.country:
+            default_country = Country.objects.filter(is_default=True).first()
+            self.country = default_country    
 
         super().save(*args, **kwargs)
 
