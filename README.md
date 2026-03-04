@@ -1,76 +1,90 @@
-# Project Overview
-This project is called **Patches America Backend**. It is designed to provide a backend service for managing and processing information for the Patches America application.
+PatchesAmerica – Backend
+Backend API for the PatchesAmerica platform, built with Django and Django REST Framework.
+This application handles API endpoints, authentication, database interactions, and serves as the main backend for frontend integration. The project is structured for scalability, maintainability, and clean separation of concerns.
+Tech Stack
+Django
+Django REST Framework
+Python 3.10+
+PostgreSQL (or SQLite for local development)
+JWT Authentication / Django Authentication
+flake8, black, isort
+Gunicorn, Nginx, Docker
+Project Structure
+patchesAmerica-backend/
+├── patchesAmerica/
+│   ├── settings/
+│   │   ├── base.py
+│   │   ├── dev.py
+│   │   └── prod.py
+│   ├── urls.py
+│   ├── wsgi.py
+│   └── asgi.py
+│
+├── apps/
+│   ├── users/
+│   │   ├── models.py
+│   │   ├── views.py
+│   │   ├── serializers.py
+│   │   ├── urls.py
+│   │   └── admin.py
+│   ├── products/
+│   │   ├── models.py
+│   │   ├── views.py
+│   │   ├── serializers.py
+│   │   ├── urls.py
+│   │   └── admin.py
+│   └── orders/
+│       ├── models.py
+│       ├── views.py
+│       ├── serializers.py
+│       ├── urls.py
+│       └── admin.py
+│
+├── manage.py
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── README.md
+├── Dockerfile
+└── docker-compose.yml
 
-## Features
-- User authentication and authorization
-- RESTful API for managing resources
-- Secure data storage
-- Docker support for easy deployment
+Installation
 
-## Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/muhammadshehzore01/patchesAmerica-backend.git
-   cd patchesAmerica-backend
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+Clone the repository:
+git clone https://github.com/muhammadshehzore01/patchesAmerica-backend.git
+cd patchesAmerica-backend
 
-## Usage
-To run the server:
-```bash
-npm start
-```
-Then open your browser at `http://localhost:3000`.
+Create a virtual environment and activate it:
 
-## API Endpoints
-- **GET** `/api/users` - Retrieve all users
-- **POST** `/api/users` - Create a new user
-- **GET** `/api/users/:id` - Retrieve a single user
-- **PUT** `/api/users/:id` - Update a user
-- **DELETE** `/api/users/:id` - Delete a user
+python -m venv venv
+source venv/bin/activate   
+venv\Scripts\activate
 
-## Project Structure
-```
-/patchesAmerica-backend
-├── /src
-│   ├── /controllers
-│   ├── /models
-│   ├── /routes
-│   └── /middlewares
-├── /config
-├── server.js
-└── package.json
-```
+Install dependencies:
 
-## Requirements
-- Node.js (v14 or higher)
-- npm (v6 or higher)
+pip install -r requirements.txt
 
-## Docker Setup
-1. Build the Docker image:
-   ```bash
-   docker build -t patches-america-backend .
-   ```
-2. Run the Docker container:
-   ```bash
-   docker run -p 3000:3000 patches-america-backend
-   ```
+Run database migrations:
 
-## Contributing Guidelines
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix:
-   ```bash
-   git checkout -b feature/your-feature
-   ```
-3. Make your changes and commit them:
-   ```bash
-   git commit -m "Description of your changes"
-   ```
-4. Push to your branch:
-   ```bash
-   git push origin feature/your-feature
-   ```
-5. Create a pull request describing your changes.
+python manage.py migrate
+
+Start the development server:
+
+python manage.py runserver
+
+The API will be available at: http://localhost:8000
+Environment Configuration
+Create a .env file in the project root with the following variables:
+
+DJANGO_SECRET_KEY=your_secret_key_here
+DEBUG=True
+DATABASE_URL=postgres://user:password@localhost:5432/patchesamerica
+ALLOWED_HOSTS=localhost,127.0.0.1
+
+Future Improvements
+Add unit and integration tests
+Configure GitHub Actions for CI/CD
+Add Swagger/OpenAPI documentation
+Implement caching and performance optimizations
+License
+This project is provided for portfolio and demonstration purposes.
